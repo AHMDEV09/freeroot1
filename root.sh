@@ -6,6 +6,7 @@ max_retries=50
 timeout=1
 ARCH=$(uname -m)
 
+# Detect CPU architecture
 if [ "$ARCH" = "x86_64" ]; then
   ARCH_ALT=amd64
 elif [ "$ARCH" = "aarch64" ]; then
@@ -15,6 +16,7 @@ else
   exit 1
 fi
 
+# Installation steps
 if [ ! -e $ROOTFS_DIR/.installed ]; then
   echo "#######################################################################################"
   echo "#"
@@ -25,22 +27,30 @@ if [ ! -e $ROOTFS_DIR/.installed ]; then
   echo "#"
   echo "#######################################################################################"
 
-  read -p "Do you want to install Ubuntu? (YES/no): " install_ubuntu
+  read -p "Do you want to install macOS-like development tools? (YES/no): " install_tools
 fi
 
-case $install_ubuntu in
+case $install_tools in
   [yY][eE][sS])
-    wget --tries=$max_retries --timeout=$timeout --no-hsts -O /tmp/rootfs.tar.gz \
-      "http://cdimage.ubuntu.com/ubuntu-base/releases/20.04/release/ubuntu-base-20.04.4-base-${ARCH_ALT}.tar.gz"
-    tar -xf /tmp/rootfs.tar.gz -C $ROOTFS_DIR
+    # Install Homebrew (macOS-like package manager)
+    if ! command -v brew &> /dev/null; then
+      echo "Homebrew not found, installing..."
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    else
+      echo "Homebrew already installed."
+    fi
+
+    # Install additional macOS-like tools via Homebrew
+    brew install wget zsh git
     ;;
   *)
-    echo "Skipping Ubuntu installation."
+    echo "Skipping macOS-like tool installation."
     ;;
 esac
 
+# Setup PRoot and related environment (for running a different root filesystem, if desired)
 if [ ! -e $ROOTFS_DIR/.installed ]; then
-  mkdir $ROOTFS_DIR/usr/local/bin -p
+  mkdir -p $ROOTFS_DIR/usr/local/bin
   wget --tries=$max_retries --timeout=$timeout --no-hsts -O $ROOTFS_DIR/usr/local/bin/proot "https://raw.githubusercontent.com/foxytouxxx/freeroot/main/proot-${ARCH}"
 
   while [ ! -s "$ROOTFS_DIR/usr/local/bin/proot" ]; do
@@ -59,15 +69,16 @@ if [ ! -e $ROOTFS_DIR/.installed ]; then
   chmod 755 $ROOTFS_DIR/usr/local/bin/proot
 fi
 
+# DNS resolution setup for rootfs
 if [ ! -e $ROOTFS_DIR/.installed ]; then
   printf "nameserver 1.1.1.1\nnameserver 1.0.0.1" > ${ROOTFS_DIR}/etc/resolv.conf
   rm -rf /tmp/rootfs.tar.xz /tmp/sbin
   touch $ROOTFS_DIR/.installed
 fi
 
+# Display success message
 CYAN='\e[0;36m'
 WHITE='\e[0;37m'
-
 RESET_COLOR='\e[0m'
 
 display_gg() {
@@ -79,6 +90,7 @@ display_gg() {
 clear
 display_gg
 
+# Running proot environment (if desired for additional emulation)
 $ROOTFS_DIR/usr/local/bin/proot \
   --rootfs="${ROOTFS_DIR}" \
   -0 -w "/root" -b /dev -b /sys -b /proc -b /etc/resolv.conf --kill-on-exit
